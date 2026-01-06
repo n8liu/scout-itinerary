@@ -6,19 +6,21 @@ import os
 
 def get_model_with_tools():
     """Get the LLM model with tools bound."""
-    from langchain_anthropic import ChatAnthropic
+    from langchain_google_genai import ChatGoogleGenerativeAI
     from scout.tools import (
         search_flights,
         search_hotels,
         create_trip_event,
         store_preference,
         recall_preferences,
+        add_itinerary_item,
+        list_trips
     )
 
-    model = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
         temperature=0,
-        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        google_api_key=os.getenv("GOOGLE_API_KEY"),
     )
     tools = [
         search_flights,
@@ -26,6 +28,8 @@ def get_model_with_tools():
         create_trip_event,
         store_preference,
         recall_preferences,
+        add_itinerary_item,
+        list_trips
     ]
     return model.bind_tools(tools)
 

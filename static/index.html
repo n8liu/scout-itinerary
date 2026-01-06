@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scout - Travel Itinerary</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✈️</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc', 400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1', 800: '#075985', 900: '#0c4a6e' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar-link.active { background-color: #f0f9ff; color: #0369a1; font-weight: 500; }
+        .sidebar-link { color: #64748b; transition: all 0.15s; }
+        .sidebar-link:hover { color: #0369a1; background-color: #f8fafc; }
+        .dark .sidebar-link.active { background-color: #0c4a6e; color: #e0f2fe; }
+        .dark .sidebar-link { color: #94a3b8; }
+        .dark .sidebar-link:hover { color: #e0f2fe; background-color: #1e293b; }
+
+        #map-container, #day-map-container { height: 100%; width: 100%; }
+        .leaflet-container { background: #f8fafc; }
+        .dark .leaflet-container { background: #1e293b; }
+
+        /* Sidebar transition */
+        aside { transition: width 0.2s ease; }
+        .sidebar-text { transition: opacity 0.15s; white-space: nowrap; overflow: hidden; }
+        .collapsed .sidebar-text { opacity: 0; width: 0; display: none; }
+        .collapsed .sidebar-icon-only { justify-content: center; }
+        .collapsed .pl-9 { padding-left: 0.75rem; justify-content: center; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+        .dark ::-webkit-scrollbar-thumb { background: #334155; }
+        .dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Calendar dark mode */
+        .dark .fc { --fc-border-color: #334155; --fc-page-bg-color: #1e293b; }
+        .dark .fc-button { background-color: #334155 !important; color: #e2e8f0 !important; border-color: #475569 !important; }
+        .dark .fc-button:hover { background-color: #475569 !important; }
+        .dark .fc-button-active { background-color: #0369a1 !important; }
+        .dark .fc-col-header-cell-cushion, .dark .fc-daygrid-day-number { color: #e2e8f0; }
+        .dark .fc-event { border: none; }
+
+        /* Quick select buttons */
+        .quick-btn { transition: all 0.15s; }
+        .quick-btn:hover { transform: translateY(-1px); }
+        .quick-btn.selected { ring: 2px; ring-color: #0ea5e9; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 h-screen flex overflow-hidden transition-colors duration-200">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-60 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col h-full flex-shrink-0 z-20 relative">
+        <!-- Collapse Toggle -->
+        <button onclick="toggleSidebar()" class="absolute -right-3 top-7 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full p-1.5 shadow-sm hover:shadow transition text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 z-50">
+            <i data-lucide="chevron-left" id="sidebar-toggle-icon" class="w-3 h-3"></i>
+        </button>
+
+        <div class="p-5">
+            <div class="flex items-center gap-2.5 mb-6">
+                <div class="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm">S</div>
+                <span class="text-lg font-semibold tracking-tight text-slate-800 dark:text-white sidebar-text">Scout</span>
+            </div>
+
+            <!-- Trip Selector -->
+            <div class="mb-5 relative">
+                <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block sidebar-text">Trip</label>
+                <button id="trip-selector-btn" class="w-full flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700 transition text-sm text-left bg-white dark:bg-slate-800 sidebar-icon-only">
+                    <div class="w-6 h-6 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="compass" class="w-3.5 h-3.5 text-primary-600 dark:text-primary-400"></i>
+                    </div>
+                    <span id="current-trip-name" class="font-medium truncate flex-1 text-slate-700 dark:text-slate-200 sidebar-text">Select Trip</span>
+                    <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 sidebar-text"></i>
+                </button>
+                <!-- Dropdown -->
+                <div id="trip-dropdown" class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg hidden z-50">
+                    <div id="trip-dropdown-list" class="max-h-48 overflow-y-auto py-1"></div>
+                    <div class="border-t border-slate-100 dark:border-slate-700 p-1.5">
+                        <button onclick="openNewTripModal()" class="w-full text-xs flex items-center gap-2 p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition font-medium">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> New Trip
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="space-y-0.5">
+                <button onclick="switchView('dashboard')" id="nav-dashboard" class="sidebar-link w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm sidebar-icon-only">
+                    <i data-lucide="layout-grid" class="w-[18px] h-[18px]"></i> <span class="sidebar-text">Dashboard</span>
+                </button>
+
+                <div id="trip-nav-items" class="hidden space-y-0.5 pt-3 mt-3 border-t border-slate-100 dark:border-slate-800">
+                    <div class="px-3 mb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider sidebar-text">Views</div>
+
+                    <button onclick="switchView('map-plan')" id="nav-map-plan" class="sidebar-link w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm sidebar-icon-only">
+                        <i data-lucide="map" class="w-[18px] h-[18px]"></i> <span class="sidebar-text">Overview</span>
+                    </button>
+
+                    <button onclick="switchView('calendar')" id="nav-calendar" class="sidebar-link w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm sidebar-icon-only">
+                        <i data-lucide="calendar" class="w-[18px] h-[18px]"></i> <span class="sidebar-text">Calendar</span>
+                    </button>
+
+                    <div class="px-3 mt-3 mb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider sidebar-text">Days</div>
+                    <div id="day-tabs" class="space-y-0.5 max-h-48 overflow-y-auto">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </nav>
+        </div>
+
+        <div class="mt-auto p-3 border-t border-slate-100 dark:border-slate-800">
+            <button onclick="toggleDarkMode()" class="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg transition sidebar-icon-only hover:bg-slate-50 dark:hover:bg-slate-800">
+                <i data-lucide="moon" class="w-[18px] h-[18px]"></i> <span class="sidebar-text">Theme</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-hidden bg-white dark:bg-slate-900 relative flex flex-col">
+
+        <!-- View: Dashboard -->
+        <div id="view-dashboard" class="flex-1 overflow-y-auto p-8 hidden">
+            <div class="max-w-5xl mx-auto">
+                <header class="mb-8 flex justify-between items-end">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Your Trips</h1>
+                        <p class="text-slate-500 dark:text-slate-400 mt-1 text-sm">Plan and manage your adventures</p>
+                    </div>
+                    <button onclick="openNewTripModal()" class="px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition flex items-center gap-2 shadow-sm">
+                        <i data-lucide="plus" class="w-4 h-4"></i> New Trip
+                    </button>
+                </header>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+                    <div class="p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
+                                <i data-lucide="briefcase" class="w-5 h-5 text-primary-600 dark:text-primary-400"></i>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-slate-900 dark:text-white" id="dash-total">0</div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Total Trips</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+                                <i data-lucide="calendar-check" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-slate-900 dark:text-white" id="dash-upcoming">0</div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Upcoming</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+                                <i data-lucide="wallet" class="w-5 h-5 text-amber-600 dark:text-amber-400"></i>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-slate-900 dark:text-white" id="dash-budget">$0</div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Total Budget</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="dashboard-trips-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Cards injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Map & Plan (Overview) -->
+        <div id="view-map-plan" class="flex-1 flex hidden">
+            <!-- Itinerary Sidebar -->
+            <div class="w-80 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col h-full">
+                <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                    <h2 class="font-semibold text-slate-800 dark:text-white text-sm">Trip Overview</h2>
+                    <button onclick="openAddItemModal()" class="text-xs px-2.5 py-1.5 bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-900/50 rounded-lg text-primary-700 dark:text-primary-300 transition font-medium">+ Add</button>
+                </div>
+                <div id="map-itinerary-list" class="flex-1 overflow-y-auto p-4 space-y-4">
+                    <!-- Timeline items -->
+                </div>
+            </div>
+            <!-- Map Area -->
+            <div class="flex-1 relative">
+                <div id="map-container"></div>
+                <!-- Map Legend -->
+                <div class="absolute top-4 left-4 z-[400] bg-white/95 dark:bg-slate-800/95 backdrop-blur shadow-lg border border-slate-200 dark:border-slate-700 rounded-xl p-4 max-w-xs">
+                    <h3 id="map-trip-title" class="font-semibold text-slate-800 dark:text-white text-sm">Select a Trip</h3>
+                    <p id="map-trip-dates" class="text-xs text-slate-500 dark:text-slate-400 mt-1">--</p>
+                    <div class="flex gap-3 mt-3 text-[10px] text-slate-500">
+                        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-primary-500"></span> Locations</div>
+                        <div class="flex items-center gap-1"><span class="w-4 h-0.5 bg-primary-400"></span> Route</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Calendar -->
+        <div id="view-calendar" class="flex-1 p-6 hidden flex flex-col">
+            <header class="mb-4 flex justify-between items-center flex-shrink-0">
+                <h1 class="text-xl font-bold text-slate-900 dark:text-white">Calendar</h1>
+                <button onclick="openAddItemModal()" class="px-3 py-1.5 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-lg text-sm hover:bg-primary-100 dark:hover:bg-primary-900/50 transition font-medium">+ Add Event</button>
+            </header>
+            <div class="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 overflow-hidden">
+                <div id="calendar-el" class="h-full"></div>
+            </div>
+        </div>
+
+        <!-- View: Day Detail (40% content / 60% map) -->
+        <div id="view-day" class="flex-1 flex hidden">
+            <!-- Left: Day Content (40%) -->
+            <div class="w-[40%] flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                <div class="p-6 border-b border-slate-100 dark:border-slate-800">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1 uppercase tracking-wide" id="day-view-number">Day 1</div>
+                            <h1 class="text-xl font-bold text-slate-900 dark:text-white" id="day-view-date">Date</h1>
+                        </div>
+                        <button onclick="openAddItemModal()" class="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition">+ Add</button>
+                    </div>
+                </div>
+                <div id="day-view-content" class="flex-1 overflow-y-auto p-6 space-y-3">
+                    <!-- Daily items -->
+                </div>
+            </div>
+            <!-- Right: Day Map (60%) -->
+            <div class="w-[60%] relative">
+                <div id="day-map-container" class="h-full"></div>
+                <div class="absolute top-4 left-4 z-[400] bg-white/95 dark:bg-slate-800/95 backdrop-blur shadow-lg border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3">
+                    <div class="text-xs font-medium text-slate-600 dark:text-slate-300" id="day-map-info">Today's Route</div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Assistant Panel (Minimalist) -->
+    <div id="assistant-panel" class="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
+        <!-- Chat Panel -->
+        <div id="chat-panel" class="mb-3 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden transition-all duration-200 origin-bottom-right scale-0 opacity-0" style="height: 480px;">
+            <div class="p-3 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <span class="font-medium text-slate-700 dark:text-slate-200 text-sm">Assistant</span>
+                <button onclick="toggleChat()" class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div id="chat-messages" class="h-[calc(100%-110px)] overflow-y-auto p-4 space-y-3 bg-white dark:bg-slate-800">
+                <div class="flex justify-start">
+                    <div class="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl rounded-tl-sm text-sm max-w-[85%]">
+                        How can I help plan your trip?
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700">
+                <div class="relative flex items-center gap-2">
+                    <input type="text" id="chat-input" placeholder="Type a message..."
+                        class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm dark:text-white"
+                        onkeypress="if(event.key === 'Enter') sendChat()">
+                    <button onclick="sendChat()" class="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                        <i data-lucide="arrow-up" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Minimalist Toggle Button -->
+        <button onclick="toggleChat()" id="chat-toggle-btn" class="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-full shadow-lg hover:shadow-xl hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-200">
+            <i data-lucide="message-circle" class="w-4 h-4"></i>
+            <span class="text-sm font-medium">Assistant</span>
+        </button>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden z-[1000] flex items-center justify-center p-4">
+
+        <!-- New Trip Modal -->
+        <div id="new-trip-modal" class="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl hidden">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-5">New Trip</h3>
+            <form id="new-trip-form" class="space-y-4">
+                <div>
+                    <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Trip Name</label>
+                    <input type="text" name="name" placeholder="e.g. Summer in Tokyo" required class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Destination</label>
+                    <input type="text" name="destination" placeholder="e.g. Tokyo, Japan" required class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Start Date</label>
+                        <input type="text" id="start-date-picker" name="start_date" placeholder="Select" required class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">End Date</label>
+                        <input type="text" id="end-date-picker" name="end_date" placeholder="Select" required class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Budget ($)</label>
+                        <input type="number" name="budget" placeholder="Optional" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Travelers</label>
+                        <input type="number" name="travelers" value="1" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-6">
+                    <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition">Create Trip</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add Item Modal (Smart - adapts to day view) -->
+        <div id="add-item-modal" class="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl hidden">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2" id="add-item-title">Add to Itinerary</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-5" id="add-item-subtitle">Add a new item to your trip</p>
+
+            <form id="add-item-form" class="space-y-4">
+                <input type="hidden" name="trip_id" id="item-trip-id">
+                <input type="hidden" name="item_date" id="item-date">
+
+                <!-- Quick Select Type -->
+                <div>
+                    <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Type</label>
+                    <div class="flex flex-wrap gap-2" id="type-quick-select">
+                        <button type="button" onclick="selectItemType('activity')" class="quick-btn px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1.5" data-type="activity">
+                            <i data-lucide="star" class="w-3.5 h-3.5"></i> Activity
+                        </button>
+                        <button type="button" onclick="selectItemType('dining')" class="quick-btn px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1.5" data-type="dining">
+                            <i data-lucide="utensils" class="w-3.5 h-3.5"></i> Dining
+                        </button>
+                        <button type="button" onclick="selectItemType('transport')" class="quick-btn px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1.5" data-type="transport">
+                            <i data-lucide="car" class="w-3.5 h-3.5"></i> Transport
+                        </button>
+                        <button type="button" onclick="selectItemType('flight')" class="quick-btn px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1.5" data-type="flight">
+                            <i data-lucide="plane" class="w-3.5 h-3.5"></i> Flight
+                        </button>
+                        <button type="button" onclick="selectItemType('hotel')" class="quick-btn px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1.5" data-type="hotel">
+                            <i data-lucide="bed" class="w-3.5 h-3.5"></i> Hotel
+                        </button>
+                    </div>
+                    <input type="hidden" name="item_type" id="item-type-input" value="activity">
+                </div>
+
+                <!-- Quick Suggestions (context-aware) -->
+                <div id="quick-suggestions" class="hidden">
+                    <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Quick Add</label>
+                    <div class="flex flex-wrap gap-2" id="suggestions-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Title</label>
+                    <input type="text" name="title" id="item-title" placeholder="What's the plan?" required class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                </div>
+
+                <!-- Date/Time Section (adapts based on context) -->
+                <div id="datetime-section">
+                    <div class="grid grid-cols-2 gap-3" id="full-datetime">
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Start</label>
+                            <input type="datetime-local" name="start_datetime" id="item-start" required class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">End (optional)</label>
+                            <input type="datetime-local" name="end_datetime" id="item-end" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 hidden" id="time-only">
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Start Time</label>
+                            <input type="time" id="item-start-time" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">End Time</label>
+                            <input type="time" id="item-end-time" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Location</label>
+                    <input type="text" name="location" id="item-location" placeholder="Where?" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Cost ($)</label>
+                        <input type="number" name="cost" step="0.01" placeholder="0.00" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Booking Ref</label>
+                        <input type="text" name="booking_ref" placeholder="Optional" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Notes</label>
+                    <textarea name="notes" placeholder="Any additional details..." rows="2" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm dark:text-white resize-none"></textarea>
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition">Add Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- State ---
+        let state = {
+            currentView: 'dashboard',
+            currentTripId: null,
+            currentViewData: null,
+            trips: [],
+            itinerary: [],
+            calendar: null,
+            map: null,
+            dayMap: null,
+            mapMarkers: [],
+            dayMapMarkers: [],
+            routeLine: null,
+            dayRouteLine: null
+        };
+
+        // --- Quick Suggestions Data ---
+        const suggestions = {
+            activity: ['Museum Visit', 'City Tour', 'Beach Day', 'Hiking', 'Shopping', 'Spa Day', 'Concert', 'Show'],
+            dining: ['Breakfast', 'Lunch', 'Dinner', 'Coffee Break', 'Local Restaurant', 'Fine Dining', 'Street Food'],
+            transport: ['Airport Transfer', 'Train', 'Taxi', 'Uber/Lyft', 'Rental Car Pickup', 'Bus Tour'],
+            flight: ['Departure Flight', 'Return Flight', 'Connecting Flight'],
+            hotel: ['Check-in', 'Check-out', 'Hotel Transfer']
+        };
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            await loadTrips();
+
+            const selectorBtn = document.getElementById('trip-selector-btn');
+            const dropdown = document.getElementById('trip-dropdown');
+
+            selectorBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.classList.toggle('hidden');
+            });
+
+            document.addEventListener('click', () => dropdown.classList.add('hidden'));
+            switchView('dashboard');
+
+            flatpickr("#start-date-picker", {
+                altInput: true, altFormat: "M j, Y", dateFormat: "Y-m-d",
+                onChange: (d, str) => endPicker.set('minDate', str)
+            });
+            const endPicker = flatpickr("#end-date-picker", {
+                altInput: true, altFormat: "M j, Y", dateFormat: "Y-m-d"
+            });
+        });
+
+        // --- API ---
+        async function loadTrips() {
+            const res = await fetch('/api/trips');
+            state.trips = await res.json();
+            renderDashboard();
+            renderTripDropdown();
+            if (state.currentTripId) selectTrip(state.currentTripId);
+        }
+
+        async function loadItinerary(tripId) {
+            const res = await fetch(`/api/trips/${tripId}/itinerary`);
+            state.itinerary = await res.json();
+            return state.itinerary;
+        }
+
+        // --- View Switching ---
+        function switchView(viewName, data = null) {
+            document.querySelectorAll('.sidebar-link').forEach(el => el.classList.remove('active'));
+            const navId = viewName === 'day' ? null : `nav-${viewName}`;
+            if(navId && document.getElementById(navId)) document.getElementById(navId).classList.add('active');
+
+            state.currentView = viewName;
+            state.currentViewData = data;
+
+            ['view-dashboard', 'view-map-plan', 'view-calendar', 'view-day'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+
+            if (viewName === 'dashboard') {
+                document.getElementById('view-dashboard').classList.remove('hidden');
+                renderDashboard();
+            } else {
+                if (!state.currentTripId) return switchView('dashboard');
+
+                const viewId = viewName === 'day' ? 'view-day' : (viewName === 'calendar' ? 'view-calendar' : 'view-map-plan');
+                document.getElementById(viewId).classList.remove('hidden');
+
+                if (viewName === 'map-plan') {
+                    requestAnimationFrame(() => {
+                        initMap('map-container', 'main');
+                        renderMapPlan();
+                    });
+                } else if (viewName === 'calendar') {
+                    setTimeout(initCalendar, 50);
+                } else if (viewName === 'day') {
+                    renderDayView(data);
+                    requestAnimationFrame(() => {
+                        initMap('day-map-container', 'day');
+                        renderDayMap(data);
+                    });
+                }
+            }
+        }
+
+        // --- Render Functions ---
+        function selectTrip(tripId) {
+            state.currentTripId = tripId;
+            const trip = state.trips.find(t => t.id === tripId);
+
+            document.getElementById('current-trip-name').textContent = trip.name;
+            document.getElementById('trip-nav-items').classList.remove('hidden');
+
+            const tabsContainer = document.getElementById('day-tabs');
+            tabsContainer.innerHTML = '';
+
+            // FIX: Parse dates properly to avoid timezone offset
+            const start = parseLocalDate(trip.start_date);
+            const end = parseLocalDate(trip.end_date);
+            let dayCount = 1;
+
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                const dateStr = formatDateLocal(d);
+                const dayNum = dayCount;
+                const dayBtn = document.createElement('button');
+                dayBtn.className = 'sidebar-link w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs pl-8';
+                dayBtn.innerHTML = `<span>Day ${dayNum}</span> <span class="text-slate-400">${d.toLocaleDateString('en-US', {month:'short', day:'numeric'})}</span>`;
+                dayBtn.onclick = () => switchView('day', { date: dateStr, number: dayNum });
+                tabsContainer.appendChild(dayBtn);
+                dayCount++;
+            }
+
+            loadItinerary(tripId).then(() => {
+                if (state.currentView !== 'dashboard') {
+                    switchView(state.currentView, state.currentViewData);
+                } else {
+                    switchView('map-plan');
+                }
+            });
+        }
+
+        function renderTripDropdown() {
+            const list = document.getElementById('trip-dropdown-list');
+            list.innerHTML = state.trips.map(trip => `
+                <button onclick="selectTrip(${trip.id})" class="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition flex justify-between items-center">
+                    <span class="truncate font-medium">${trip.name}</span>
+                    ${state.currentTripId === trip.id ? '<i data-lucide="check" class="w-3.5 h-3.5 text-primary-600"></i>' : ''}
+                </button>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function renderDashboard() {
+            const list = document.getElementById('dashboard-trips-list');
+
+            document.getElementById('dash-total').textContent = state.trips.length;
+            const upcoming = state.trips.filter(t => new Date(t.start_date) >= new Date()).length;
+            document.getElementById('dash-upcoming').textContent = upcoming;
+            const totalBudget = state.trips.reduce((acc, t) => acc + (t.budget || 0), 0);
+            document.getElementById('dash-budget').textContent = '$' + totalBudget.toLocaleString();
+
+            if (state.trips.length === 0) {
+                list.innerHTML = `<div class="col-span-2 text-center py-16 text-slate-400">No trips yet. Create one to get started!</div>`;
+                return;
+            }
+
+            list.innerHTML = state.trips.map(trip => `
+                <div onclick="selectTrip(${trip.id})" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:shadow-lg hover:border-primary-200 dark:hover:border-primary-800 transition-all cursor-pointer group">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 class="font-semibold text-slate-800 dark:text-white">${trip.name}</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">${trip.destination}</p>
+                        </div>
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 group-hover:text-primary-500 transition"></i>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                        <div class="flex items-center gap-1">
+                            <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                            ${new Date(trip.start_date).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <i data-lucide="users" class="w-3.5 h-3.5"></i>
+                            ${trip.travelers}
+                        </div>
+                        ${trip.budget ? `<div class="flex items-center gap-1"><i data-lucide="wallet" class="w-3.5 h-3.5"></i> $${trip.budget}</div>` : ''}
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function renderMapPlan() {
+            const trip = state.trips.find(t => t.id === state.currentTripId);
+            if (!trip) return;
+
+            document.getElementById('map-trip-title').textContent = trip.name;
+            document.getElementById('map-trip-dates').textContent = `${formatDateNice(trip.start_date)} - ${formatDateNice(trip.end_date)}`;
+
+            clearMapMarkers('main');
+
+            const coords = [];
+            if (trip.lat && trip.lng) {
+                const m = L.marker([trip.lat, trip.lng]).addTo(state.map).bindPopup(`<b>${trip.destination}</b>`);
+                state.mapMarkers.push(m);
+                coords.push([trip.lat, trip.lng]);
+            }
+
+            state.itinerary.forEach(item => {
+                if (item.lat && item.lng) {
+                    const m = L.circleMarker([item.lat, item.lng], {
+                        radius: 6, fillColor: '#0ea5e9', color: '#fff', weight: 2, fillOpacity: 1
+                    }).addTo(state.map).bindPopup(`<b>${item.title}</b><br><small>${formatTime(item.start_datetime)}</small>`);
+                    state.mapMarkers.push(m);
+                    coords.push([item.lat, item.lng]);
+                }
+            });
+
+            // Draw route line
+            if (coords.length > 1) {
+                if (state.routeLine) state.map.removeLayer(state.routeLine);
+                state.routeLine = L.polyline(coords, {color: '#0ea5e9', weight: 2, opacity: 0.6, dashArray: '5, 10'}).addTo(state.map);
+            }
+
+            if (state.mapMarkers.length > 0) {
+                const group = L.featureGroup(state.mapMarkers);
+                state.map.fitBounds(group.getBounds().pad(0.15));
+            } else {
+                state.map.setView([20, 0], 2);
+            }
+
+            // Render sidebar list
+            const list = document.getElementById('map-itinerary-list');
+            const grouped = groupItineraryByDate(state.itinerary);
+
+            if (Object.keys(grouped).length === 0) {
+                list.innerHTML = `<div class="text-center py-8 text-slate-400 text-sm">No items yet</div>`;
+                return;
+            }
+
+            list.innerHTML = Object.entries(grouped).map(([date, items]) => `
+                <div>
+                    <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 sticky top-0 bg-white dark:bg-slate-900 py-1">
+                        ${formatDateNice(date)}
+                    </div>
+                    <div class="space-y-2">
+                        ${items.map(item => `
+                            <div class="p-2.5 rounded-lg border border-slate-100 dark:border-slate-700 hover:border-primary-200 dark:hover:border-primary-800 transition cursor-pointer" onclick="highlightItem(${item.id})">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
+                                    <span class="text-xs text-slate-500">${formatTime(item.start_datetime)}</span>
+                                </div>
+                                <div class="text-sm font-medium text-slate-700 dark:text-slate-200 mt-1">${item.title}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderDayView(data) {
+            const dateStr = data.date;
+            document.getElementById('day-view-number').textContent = `Day ${data.number}`;
+            document.getElementById('day-view-date').textContent = formatDateNice(dateStr);
+            document.getElementById('day-map-info').textContent = `Day ${data.number} Route`;
+
+            const items = state.itinerary.filter(i => i.start_datetime.startsWith(dateStr)).sort((a,b) => new Date(a.start_datetime) - new Date(b.start_datetime));
+            const container = document.getElementById('day-view-content');
+
+            if (items.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                        <i data-lucide="calendar-plus" class="w-8 h-8 text-slate-300 mx-auto mb-2"></i>
+                        <p class="text-slate-400 text-sm">Nothing planned yet</p>
+                        <button onclick="openAddItemModal()" class="mt-3 text-sm text-primary-600 hover:text-primary-700 font-medium">+ Add something</button>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            const typeIcons = { flight: 'plane', hotel: 'bed', activity: 'star', dining: 'utensils', transport: 'car' };
+            const typeColors = { flight: 'blue', hotel: 'purple', activity: 'amber', dining: 'orange', transport: 'slate' };
+
+            container.innerHTML = items.map(item => {
+                const icon = typeIcons[item.item_type] || 'circle';
+                const color = typeColors[item.item_type] || 'slate';
+                return `
+                <div class="flex gap-3 group">
+                    <div class="flex flex-col items-center">
+                        <div class="w-8 h-8 rounded-lg bg-${color}-100 dark:bg-${color}-900/30 flex items-center justify-center">
+                            <i data-lucide="${icon}" class="w-4 h-4 text-${color}-600 dark:text-${color}-400"></i>
+                        </div>
+                        <div class="w-0.5 flex-1 bg-slate-100 dark:bg-slate-800 mt-2"></div>
+                    </div>
+                    <div class="flex-1 pb-4">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400 mb-0.5">${formatTime(item.start_datetime)}${item.end_datetime ? ' - ' + formatTime(item.end_datetime) : ''}</div>
+                                <h4 class="font-medium text-slate-800 dark:text-white">${item.title}</h4>
+                            </div>
+                            <button onclick="deleteItem(${item.id})" class="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                        ${item.location ? `<div class="flex items-center gap-1 mt-1 text-xs text-slate-500"><i data-lucide="map-pin" class="w-3 h-3"></i> ${item.location}</div>` : ''}
+                        ${item.notes ? `<div class="mt-2 text-xs text-slate-500 bg-slate-50 dark:bg-slate-800 p-2 rounded">${item.notes}</div>` : ''}
+                    </div>
+                </div>
+            `}).join('');
+            lucide.createIcons();
+        }
+
+        function renderDayMap(data) {
+            clearMapMarkers('day');
+
+            const items = state.itinerary.filter(i => i.start_datetime.startsWith(data.date) && i.lat && i.lng);
+            const coords = [];
+
+            items.forEach((item, idx) => {
+                const m = L.marker([item.lat, item.lng], {
+                    icon: L.divIcon({
+                        className: 'custom-marker',
+                        html: `<div class="w-6 h-6 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center shadow-lg">${idx + 1}</div>`,
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    })
+                }).addTo(state.dayMap).bindPopup(`<b>${item.title}</b>`);
+                state.dayMapMarkers.push(m);
+                coords.push([item.lat, item.lng]);
+            });
+
+            if (coords.length > 1) {
+                if (state.dayRouteLine) state.dayMap.removeLayer(state.dayRouteLine);
+                state.dayRouteLine = L.polyline(coords, {color: '#0ea5e9', weight: 3, opacity: 0.8}).addTo(state.dayMap);
+            }
+
+            if (state.dayMapMarkers.length > 0) {
+                const group = L.featureGroup(state.dayMapMarkers);
+                state.dayMap.fitBounds(group.getBounds().pad(0.2));
+            } else {
+                const trip = state.trips.find(t => t.id === state.currentTripId);
+                if (trip?.lat && trip?.lng) {
+                    state.dayMap.setView([trip.lat, trip.lng], 12);
+                }
+            }
+        }
+
+        // --- Map Functions ---
+        function initMap(containerId, type) {
+            const mapVar = type === 'day' ? 'dayMap' : 'map';
+
+            if (state[mapVar]) {
+                setTimeout(() => state[mapVar].invalidateSize(), 100);
+                return;
+            }
+
+            state[mapVar] = L.map(containerId, { zoomControl: false }).setView([20, 0], 2);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OSM &copy; CARTO',
+                maxZoom: 19
+            }).addTo(state[mapVar]);
+            L.control.zoom({ position: 'topright' }).addTo(state[mapVar]);
+            setTimeout(() => state[mapVar].invalidateSize(), 100);
+        }
+
+        function clearMapMarkers(type) {
+            const markers = type === 'day' ? 'dayMapMarkers' : 'mapMarkers';
+            const map = type === 'day' ? state.dayMap : state.map;
+
+            state[markers].forEach(m => map?.removeLayer(m));
+            state[markers] = [];
+        }
+
+        function initCalendar() {
+            const el = document.getElementById('calendar-el');
+            if (state.calendar) state.calendar.destroy();
+
+            state.calendar = new FullCalendar.Calendar(el, {
+                initialView: 'dayGridMonth',
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
+                events: state.itinerary.map(item => ({
+                    id: item.id,
+                    title: item.title,
+                    start: item.start_datetime,
+                    end: item.end_datetime,
+                    color: getTypeColor(item.item_type)
+                })),
+                height: '100%',
+                editable: true,
+                selectable: true,
+                dateClick: (info) => {
+                    openAddItemModal(info.dateStr);
+                },
+                eventClick: (info) => {
+                    if (confirm(`Delete "${info.event.title}"?`)) {
+                        deleteItem(parseInt(info.event.id));
+                    }
+                },
+                eventDrop: async (info) => {
+                    await updateItemDate(info.event.id, info.event.start);
+                }
+            });
+            state.calendar.render();
+        }
+
+        async function updateItemDate(itemId, newDate) {
+            const item = state.itinerary.find(i => i.id === parseInt(itemId));
+            if (!item) return;
+
+            const newStart = newDate.toISOString().slice(0, 16);
+            await fetch(`/api/itinerary/${itemId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ start_datetime: newStart })
+            }).catch(() => {});
+            await loadItinerary(state.currentTripId);
+        }
+
+        // --- Helpers ---
+        function parseLocalDate(dateStr) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        }
+
+        function formatDateLocal(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function formatDateNice(dateStr) {
+            return parseLocalDate(dateStr).toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+        }
+
+        function formatTime(iso) {
+            return new Date(iso).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+        }
+
+        function groupItineraryByDate(items) {
+            const grouped = {};
+            items.sort((a,b) => new Date(a.start_datetime) - new Date(b.start_datetime)).forEach(item => {
+                const date = item.start_datetime.split('T')[0];
+                if (!grouped[date]) grouped[date] = [];
+                grouped[date].push(item);
+            });
+            return grouped;
+        }
+
+        function getTypeColor(type) {
+            const colors = { flight: '#3b82f6', hotel: '#8b5cf6', activity: '#f59e0b', dining: '#f97316', transport: '#64748b' };
+            return colors[type] || '#64748b';
+        }
+
+        // --- UI Functions ---
+        function toggleChat() {
+            const panel = document.getElementById('chat-panel');
+            const btn = document.getElementById('chat-toggle-btn');
+            if (panel.classList.contains('scale-0')) {
+                panel.classList.remove('scale-0', 'opacity-0');
+                btn.classList.add('hidden');
+            } else {
+                panel.classList.add('scale-0', 'opacity-0');
+                btn.classList.remove('hidden');
+            }
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('sidebar-toggle-icon');
+
+            sidebar.classList.toggle('w-60');
+            sidebar.classList.toggle('w-16');
+            sidebar.classList.toggle('collapsed');
+
+            icon.setAttribute('data-lucide', sidebar.classList.contains('w-16') ? 'chevron-right' : 'chevron-left');
+            lucide.createIcons();
+
+            if (state.map) setTimeout(() => state.map.invalidateSize(), 250);
+            if (state.dayMap) setTimeout(() => state.dayMap.invalidateSize(), 250);
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark');
+            localStorage.setItem('scout_theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+            if (state.calendar) setTimeout(() => state.calendar.render(), 100);
+        }
+
+        if (localStorage.getItem('scout_theme') === 'dark') {
+            document.body.classList.add('dark');
+        }
+
+        function openNewTripModal() {
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+            document.getElementById('new-trip-modal').classList.remove('hidden');
+        }
+
+        function openAddItemModal(dateStr = null) {
+            if (!state.currentTripId) return alert("Select a trip first");
+
+            document.getElementById('item-trip-id').value = state.currentTripId;
+
+            const isFromDayView = state.currentView === 'day' && state.currentViewData;
+            const targetDate = dateStr || (isFromDayView ? state.currentViewData.date : null);
+
+            const fullDatetimeSection = document.getElementById('full-datetime');
+            const timeOnlySection = document.getElementById('time-only');
+            const startDatetimeInput = document.getElementById('item-start');
+            const startTimeInput = document.getElementById('item-start-time');
+
+            // Update modal title/subtitle
+            if (targetDate) {
+                document.getElementById('add-item-title').textContent = 'Add to ' + formatDateNice(targetDate);
+                document.getElementById('add-item-subtitle').textContent = 'What are you planning?';
+                document.getElementById('item-date').value = targetDate;
+
+                // Show time-only inputs, hide full datetime
+                fullDatetimeSection.classList.add('hidden');
+                timeOnlySection.classList.remove('hidden');
+                startDatetimeInput.removeAttribute('required');
+                startTimeInput.setAttribute('required', '');
+            } else {
+                document.getElementById('add-item-title').textContent = 'Add to Itinerary';
+                document.getElementById('add-item-subtitle').textContent = 'Add a new item to your trip';
+                document.getElementById('item-date').value = '';
+
+                // Show full datetime inputs, hide time-only
+                fullDatetimeSection.classList.remove('hidden');
+                timeOnlySection.classList.add('hidden');
+                startDatetimeInput.setAttribute('required', '');
+                startTimeInput.removeAttribute('required');
+            }
+
+            selectItemType('activity');
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+            document.getElementById('add-item-modal').classList.remove('hidden');
+        }
+
+        function selectItemType(type) {
+            document.getElementById('item-type-input').value = type;
+
+            // Update button states
+            document.querySelectorAll('#type-quick-select button').forEach(btn => {
+                btn.classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/30', 'text-primary-700', 'dark:text-primary-300');
+                if (btn.dataset.type === type) {
+                    btn.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/30', 'text-primary-700', 'dark:text-primary-300');
+                }
+            });
+
+            // Show suggestions
+            const suggestionsDiv = document.getElementById('quick-suggestions');
+            const suggestionsList = document.getElementById('suggestions-list');
+
+            if (suggestions[type]) {
+                suggestionsDiv.classList.remove('hidden');
+                suggestionsList.innerHTML = suggestions[type].map(s => `
+                    <button type="button" onclick="document.getElementById('item-title').value='${s}'" class="px-2.5 py-1 text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/30 hover:text-primary-700 transition">${s}</button>
+                `).join('');
+            } else {
+                suggestionsDiv.classList.add('hidden');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+            document.getElementById('new-trip-modal').classList.add('hidden');
+            document.getElementById('add-item-modal').classList.add('hidden');
+            document.getElementById('add-item-form').reset();
+        }
+
+        // --- Form Handlers ---
+        document.getElementById('new-trip-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = Object.fromEntries(new FormData(e.target));
+            data.travelers = parseInt(data.travelers);
+            data.budget = data.budget ? parseFloat(data.budget) : null;
+
+            try {
+                const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(data.destination)}`);
+                const res = await geo.json();
+                if(res.length) { data.lat = parseFloat(res[0].lat); data.lng = parseFloat(res[0].lon); }
+            } catch(err) {}
+
+            const res = await fetch('/api/trips', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const newTrip = await res.json();
+
+            await loadTrips();
+            selectTrip(newTrip.id);
+            closeModal();
+            e.target.reset();
+        });
+
+        document.getElementById('add-item-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            data.trip_id = parseInt(data.trip_id);
+            data.cost = data.cost ? parseFloat(data.cost) : null;
+
+            // Handle date/time based on context
+            const itemDate = data.item_date;
+            if (itemDate) {
+                // Time-only mode
+                const startTime = document.getElementById('item-start-time').value || '09:00';
+                const endTime = document.getElementById('item-end-time').value;
+                data.start_datetime = `${itemDate}T${startTime}`;
+                if (endTime) data.end_datetime = `${itemDate}T${endTime}`;
+            }
+
+            delete data.item_date;
+
+            // Geocode location
+            if (data.location) {
+                try {
+                    const trip = state.trips.find(t => t.id === state.currentTripId);
+                    const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(data.location + ', ' + trip.destination)}`);
+                    const res = await geo.json();
+                    if(res.length) { data.lat = parseFloat(res[0].lat); data.lng = parseFloat(res[0].lon); }
+                } catch(err) {}
+            }
+
+            await fetch('/api/itinerary', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+
+            await loadItinerary(state.currentTripId);
+
+            if (state.currentView === 'map-plan') renderMapPlan();
+            else if (state.currentView === 'calendar') initCalendar();
+            else if (state.currentView === 'day') {
+                renderDayView(state.currentViewData);
+                renderDayMap(state.currentViewData);
+            }
+
+            closeModal();
+        });
+
+        async function deleteItem(id) {
+            await fetch(`/api/itinerary/${id}`, {method:'DELETE'});
+            await loadItinerary(state.currentTripId);
+
+            if (state.currentView === 'day') {
+                renderDayView(state.currentViewData);
+                renderDayMap(state.currentViewData);
+            } else if (state.currentView === 'map-plan') {
+                renderMapPlan();
+            } else if (state.currentView === 'calendar') {
+                initCalendar();
+            }
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const msg = input.value.trim();
+            if(!msg) return;
+
+            const box = document.getElementById('chat-messages');
+            box.innerHTML += `<div class="flex justify-end"><div class="bg-primary-600 text-white px-3 py-2 rounded-xl rounded-tr-sm text-sm max-w-[85%]">${msg}</div></div>`;
+            input.value = '';
+            box.scrollTop = box.scrollHeight;
+
+            try {
+                const loadingId = 'loading-' + Date.now();
+                box.innerHTML += `<div id="${loadingId}" class="flex justify-start"><div class="bg-slate-100 dark:bg-slate-700 px-3 py-2 rounded-xl rounded-tl-sm text-sm flex items-center gap-1"><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:0.1s"></span><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:0.2s"></span></div></div>`;
+                box.scrollTop = box.scrollHeight;
+
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({role: 'user', content: msg, trip_id: state.currentTripId})
+                });
+                const data = await res.json();
+
+                document.getElementById(loadingId).remove();
+                box.innerHTML += `<div class="flex justify-start"><div class="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl rounded-tl-sm text-sm max-w-[85%]">${data.response.replace(/\n/g, '<br>')}</div></div>`;
+
+                if (state.currentTripId) {
+                    await loadItinerary(state.currentTripId);
+                    if (state.currentView === 'map-plan') renderMapPlan();
+                    else if (state.currentView === 'calendar') initCalendar();
+                    else if (state.currentView === 'day') {
+                        renderDayView(state.currentViewData);
+                        renderDayMap(state.currentViewData);
+                    }
+                }
+            } catch(err) {
+                document.getElementById(loadingId)?.remove();
+                box.innerHTML += `<div class="flex justify-start"><div class="bg-red-100 text-red-600 px-3 py-2 rounded-xl text-sm">Connection error</div></div>`;
+            }
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function highlightItem(itemId) {
+            const item = state.itinerary.find(i => i.id === itemId);
+            if (item?.lat && item?.lng && state.map) {
+                state.map.setView([item.lat, item.lng], 15);
+                state.mapMarkers.forEach(m => {
+                    if (m.getLatLng().lat === item.lat && m.getLatLng().lng === item.lng) {
+                        m.openPopup();
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>

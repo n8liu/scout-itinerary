@@ -10,7 +10,7 @@ class Settings:
     """Application settings loaded from environment variables."""
 
     # API Keys
-    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
     SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "")
     SKYSCANNER_API_KEY = os.getenv("SKYSCANNER_API_KEY", "")
     PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
@@ -24,7 +24,7 @@ class Settings:
     GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH", "./credentials.json")
 
     # Model Configuration
-    MODEL_NAME = os.getenv("MODEL_NAME", "claude-sonnet-4-20250514")
+    MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.0-flash")
     MODEL_TEMPERATURE = float(os.getenv("MODEL_TEMPERATURE", "0"))
 
     @classmethod
@@ -32,8 +32,8 @@ class Settings:
         """Validate that required settings are present."""
         missing = []
 
-        if not cls.ANTHROPIC_API_KEY:
-            missing.append("ANTHROPIC_API_KEY")
+        if not cls.GOOGLE_API_KEY:
+            missing.append("GOOGLE_API_KEY")
 
         return missing
 

@@ -1,12 +1,19 @@
 # Scout
 
-An AI travel agent built with LangGraph that searches flights, hotels, and manages calendar events.
+An AI travel agent with a full-featured dashboard. Built with LangGraph, FastAPI, and Gemini.
+
+## Features
+
+- **Interactive Dashboard** — Map view of all destinations, trip management, AI chat
+- **Calendar View** — Full calendar with all itinerary items, filtering by trip
+- **Trip Management** — Create trips, add flights/hotels/activities, track budgets
+- **AI Planning** — Chat with Scout to plan trips using natural language
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  LangGraph State Machine                                    │
+│  LangGraph Agent                                            │
 │  ┌────────┐   ┌──────────┐   ┌─────────┐   ┌────────────┐  │
 │  │ Intake │──▶│ Research │──▶│ Compare │──▶│  Finalize  │  │
 │  └────────┘   └────┬─────┘   └─────────┘   └────────────┘  │
@@ -16,7 +23,9 @@ An AI travel agent built with LangGraph that searches flights, hotels, and manag
 │               │  Tools  │                                   │
 │               └─────────┘                                   │
 ├─────────────────────────────────────────────────────────────┤
-│  Tools: Flights (SerpApi) │ Hotels │ Calendar │ Pinecone   │
+│  FastAPI Backend + SQLite                                   │
+├─────────────────────────────────────────────────────────────┤
+│  Dashboard: Map (Leaflet) │ Calendar (FullCalendar) │ Chat │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -24,57 +33,49 @@ An AI travel agent built with LangGraph that searches flights, hotels, and manag
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY="your-key"
+export GOOGLE_API_KEY="your-gemini-key"
+
+# Run the dashboard
+python server.py
+```
+
+Open http://localhost:8000
+
+## CLI Mode
+
+```bash
 python main.py
 ```
-
-## Usage
-
-```
-You: Plan a trip to Tokyo in March for 2 people. Budget $3000.
-```
-
-The agent extracts requirements, searches for options, presents comparisons, and can add events to your calendar.
 
 ## Project Structure
 
 ```
 scout/
-├── agent/
-│   ├── graph.py      # LangGraph workflow
-│   ├── nodes.py      # Intake, research, compare, finalize
-│   └── state.py      # TypedDict state schema
-├── tools/
-│   ├── flights.py    # SerpApi Google Flights
-│   ├── hotels.py     # Hotel search
-│   ├── calendar.py   # Google Calendar
-│   └── memory.py     # Pinecone vector store
-└── config/
-    └── settings.py
+├── agent/           # LangGraph workflow
+├── tools/           # Flight, hotel, calendar, memory tools
+├── api/             # FastAPI routes and models
+└── config/          # Settings
+static/              # Dashboard frontend
+server.py            # FastAPI server
+main.py              # CLI entry point
 ```
 
 ## Tech Stack
 
-- **LangGraph** — Multi-step agentic workflow with conditional routing
-- **Claude** — LLM for reasoning and tool orchestration
-- **Pinecone** — Vector memory for user preferences
-- **SerpApi** — Real-time flight data
-- **Google Calendar API** — Trip event creation
+- **LangGraph** — Agentic workflow with conditional routing
+- **Gemini** — LLM for reasoning and tool orchestration
+- **FastAPI** — REST API backend
+- **Leaflet** — Interactive maps
+- **FullCalendar** — Calendar views
+- **Tailwind CSS** — Styling
 
 ## API Keys
 
 | Key | Required | Purpose |
 |-----|----------|---------|
-| `ANTHROPIC_API_KEY` | Yes | Agent reasoning |
+| `GOOGLE_API_KEY` | Yes | Gemini AI |
 | `SERPAPI_API_KEY` | No | Flight search |
 | `PINECONE_API_KEY` | No | Preference storage |
-| `OPENAI_API_KEY` | No | Embeddings |
-
-## Testing
-
-```bash
-pytest tests/
-```
 
 ## License
 
